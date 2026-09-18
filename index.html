@@ -334,17 +334,22 @@
   }
 
   .winner-banner {
-    background: var(--gold-soft);
+    background: linear-gradient(135deg, var(--gold-soft), #FCF5E4);
     border: 1px solid var(--gold);
     border-radius: var(--radius);
-    padding: 14px 16px;
+    padding: 16px;
     margin-bottom: 16px;
-    font-size: 14px;
+    font-size: 15px;
+    font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
   }
-  .winner-banner .trophy { font-size: 22px; }
+  .winner-banner .trophy {
+    font-size: 28px;
+    cursor: pointer;
+    animation: trophy-bounce 1.8s ease-in-out infinite;
+  }
   .hidden { display: none !important; }
   .modal-overlay {
     position: fixed;
@@ -419,6 +424,67 @@
     cursor: pointer;
     text-decoration: underline;
   }
+  /* Celebration */
+  #fx-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 20;
+  }
+  .celebration {
+    z-index: 9;
+    background: rgba(30,27,22,0.55);
+  }
+  .celebration-box {
+    background: var(--card);
+    border: 2px solid var(--gold);
+    border-radius: 16px;
+    padding: 28px 24px 22px;
+    max-width: 340px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 18px 50px rgba(30,27,22,0.35);
+    animation: pop-in 0.45s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+  }
+  .celebration-trophy {
+    font-size: 58px;
+    line-height: 1;
+    animation: trophy-bounce 1.8s ease-in-out infinite;
+  }
+  .celebration-eyebrow {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 12px 0 0;
+  }
+  .celebration-title {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 26px;
+    font-weight: 700;
+    margin: 4px 0 2px;
+    line-height: 1.2;
+  }
+  .celebration-score {
+    font-size: 14px;
+    color: var(--ink-soft);
+    margin: 0 0 20px;
+    font-variant-numeric: tabular-nums;
+  }
+  @keyframes pop-in {
+    from { transform: scale(0.82) translateY(14px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+  @keyframes trophy-bounce {
+    0%, 100% { transform: translateY(0) rotate(-5deg); }
+    50% { transform: translateY(-8px) rotate(5deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .celebration-box, .celebration-trophy, .winner-banner .trophy { animation: none; }
+  }
+
   .end-game-btn {
     width: 100%;
     padding: 12px;
@@ -481,6 +547,21 @@
 <div class="footer-actions hidden" id="footer-actions">
   <div class="footer-inner">
     <button class="secondary-btn" id="new-game-btn">Neues Spiel</button>
+  </div>
+</div>
+
+<canvas id="fx-canvas" class="hidden"></canvas>
+
+<div id="celebration-overlay" class="modal-overlay celebration hidden">
+  <div class="celebration-box">
+    <div class="celebration-trophy">🏆</div>
+    <p class="celebration-eyebrow">Spiel gewonnen</p>
+    <p class="celebration-title" id="celebration-title"></p>
+    <p class="celebration-score" id="celebration-score"></p>
+    <div class="modal-actions">
+      <button class="secondary-btn" id="celebration-close">Schließen</button>
+      <button class="primary-btn" id="celebration-end" style="margin-top:0;">Sieg vermerken</button>
+    </div>
   </div>
 </div>
 
@@ -687,15 +768,17 @@
   function renderScoreInputs() {
     pendingScores = state.players.map(() => 0);
     scoreInputsEl.innerHTML = '';
-    rankedOrder().forEach(pIdx => {
+    // Entry fields keep the order the players were set up in, so the rows
+    // stay where your fingers expect them from round to round.
+    state.players.forEach((name, i) => {
       const row = document.createElement('div');
       row.className = 'score-input-row';
       row.innerHTML = `
-        <span class="sir-name">${escapeHtml(state.players[pIdx])}</span>
+        <span class="sir-name">${escapeHtml(name)}</span>
         <div class="sir-controls">
-          <button class="stepper-btn" data-idx="${pIdx}" data-delta="-1">&minus;</button>
-          <input class="sir-input" type="number" inputmode="numeric" value="0" data-idx="${pIdx}">
-          <button class="stepper-btn" data-idx="${pIdx}" data-delta="1">+</button>
+          <button class="stepper-btn" data-idx="${i}" data-delta="-1">&minus;</button>
+          <input class="sir-input" type="number" inputmode="numeric" value="0" data-idx="${i}">
+          <button class="stepper-btn" data-idx="${i}" data-delta="1">+</button>
         </div>
       `;
       scoreInputsEl.appendChild(row);
@@ -731,17 +814,16 @@
       return;
     }
     const t = totals();
-    const order = rankedOrder();
     let html = '<table class="history-table"><thead><tr><th>Runde</th>';
-    order.forEach(pIdx => { html += `<th>${escapeHtml(state.players[pIdx])}</th>`; });
+    state.players.forEach(name => { html += `<th>${escapeHtml(name)}</th>`; });
     html += '</tr></thead><tbody>';
     state.rounds.forEach((round, rIdx) => {
       html += `<tr data-round-idx="${rIdx}"><td class="round-num">${rIdx + 1}<span class="edit-hint">bearbeiten</span></td>`;
-      order.forEach(pIdx => { html += `<td>${round[pIdx] || 0}</td>`; });
+      state.players.forEach((_, i) => { html += `<td>${round[i] || 0}</td>`; });
       html += '</tr>';
     });
     html += '</tbody><tfoot><tr><td>Gesamt</td>';
-    order.forEach(pIdx => { html += `<td>${t[pIdx]}</td>`; });
+    t.forEach(total => { html += `<td>${total}</td>`; });
     html += '</tr></tfoot></table>';
     historyContent.innerHTML = html;
 
@@ -758,6 +840,157 @@
     historyToggleBtn.textContent = (historyOpen ? '▴' : '▾') + ' Rundenverlauf ' + (historyOpen ? 'ausblenden' : 'anzeigen');
   });
 
+  // ---- Fireworks ----
+  const fxCanvas = document.getElementById('fx-canvas');
+  const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const FX_HUES = [45, 8, 145, 200, 320, 275];
+  const FX_GRAVITY = 0.06;
+  let fxCtx = null, fxW = 0, fxH = 0;
+  let fxRockets = [], fxSparks = [];
+  let fxRaf = null, fxStopAt = 0, fxNextLaunch = 0, fxLast = 0;
+
+  function fxResize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    fxW = window.innerWidth;
+    fxH = window.innerHeight;
+    fxCanvas.width = Math.round(fxW * dpr);
+    fxCanvas.height = Math.round(fxH * dpr);
+    fxCtx = fxCanvas.getContext('2d');
+    fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  window.addEventListener('resize', () => { if (fxRaf !== null) fxResize(); });
+
+  function fxLaunch() {
+    const x = fxW * (0.12 + Math.random() * 0.76);
+    const apexY = fxH * (0.1 + Math.random() * 0.32);
+    fxRockets.push({
+      x: x, y: fxH + 8, px: x, py: fxH + 8,
+      vx: (Math.random() - 0.5) * 1.4,
+      vy: -Math.sqrt(2 * FX_GRAVITY * (fxH - apexY)),
+      hue: FX_HUES[Math.floor(Math.random() * FX_HUES.length)]
+    });
+  }
+
+  function fxExplode(r) {
+    const count = 48 + Math.floor(Math.random() * 28);
+    const power = 3.2 + Math.random() * 2.2;
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + Math.random() * 0.3;
+      const speed = power * (0.35 + Math.random() * 0.75);
+      fxSparks.push({
+        x: r.x, y: r.y, px: r.x, py: r.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        hue: r.hue + (Math.random() * 30 - 15),
+        life: 1,
+        decay: 0.011 + Math.random() * 0.013
+      });
+    }
+  }
+
+  function fxFrame(now) {
+    const dt = Math.min((now - fxLast) / 16.67, 3);
+    fxLast = now;
+    fxCtx.clearRect(0, 0, fxW, fxH);
+    fxCtx.globalCompositeOperation = 'lighter';
+    fxCtx.lineCap = 'round';
+
+    if (now < fxStopAt && now >= fxNextLaunch) {
+      fxLaunch();
+      if (Math.random() < 0.4) fxLaunch();
+      fxNextLaunch = now + 240 + Math.random() * 340;
+    }
+
+    for (let i = fxRockets.length - 1; i >= 0; i--) {
+      const r = fxRockets[i];
+      r.px = r.x; r.py = r.y;
+      r.x += r.vx * dt;
+      r.y += r.vy * dt;
+      r.vy += FX_GRAVITY * dt;
+      fxCtx.strokeStyle = `hsla(${r.hue}, 90%, 72%, 0.9)`;
+      fxCtx.lineWidth = 2.4;
+      fxCtx.beginPath();
+      fxCtx.moveTo(r.px, r.py);
+      fxCtx.lineTo(r.x, r.y);
+      fxCtx.stroke();
+      if (r.vy >= 0) {
+        fxExplode(r);
+        fxRockets.splice(i, 1);
+      }
+    }
+
+    for (let i = fxSparks.length - 1; i >= 0; i--) {
+      const s = fxSparks[i];
+      s.life -= s.decay * dt;
+      if (s.life <= 0) { fxSparks.splice(i, 1); continue; }
+      const drag = Math.pow(0.975, dt);
+      s.px = s.x; s.py = s.y;
+      s.vx *= drag;
+      s.vy = s.vy * drag + 0.035 * dt;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      fxCtx.strokeStyle = `hsla(${s.hue}, 95%, ${45 + s.life * 25}%, ${s.life})`;
+      fxCtx.lineWidth = 1 + s.life * 1.8;
+      fxCtx.beginPath();
+      fxCtx.moveTo(s.px, s.py);
+      fxCtx.lineTo(s.x, s.y);
+      fxCtx.stroke();
+    }
+
+    fxCtx.globalCompositeOperation = 'source-over';
+
+    if (now >= fxStopAt && fxRockets.length === 0 && fxSparks.length === 0) {
+      stopFireworks();
+      return;
+    }
+    fxRaf = requestAnimationFrame(fxFrame);
+  }
+
+  function startFireworks(durationMs) {
+    if (reduceMotion) return;
+    fxResize();
+    fxCanvas.classList.remove('hidden');
+    fxStopAt = performance.now() + (durationMs || 9000);
+    fxNextLaunch = 0;
+    if (fxRaf === null) {
+      fxLast = performance.now();
+      fxRaf = requestAnimationFrame(fxFrame);
+    }
+  }
+
+  function stopFireworks() {
+    if (fxRaf !== null) cancelAnimationFrame(fxRaf);
+    fxRaf = null;
+    fxRockets = [];
+    fxSparks = [];
+    if (fxCtx) fxCtx.clearRect(0, 0, fxW, fxH);
+    fxCanvas.classList.add('hidden');
+  }
+
+  // ---- Winner celebration ----
+  const celebrationOverlay = document.getElementById('celebration-overlay');
+
+  function celebrate(winners, total) {
+    document.getElementById('celebration-title').textContent =
+      winners.join(' & ') + (winners.length > 1 ? ' gewinnen!' : ' gewinnt!');
+    document.getElementById('celebration-score').textContent = total + ' Punkte';
+    celebrationOverlay.classList.remove('hidden');
+    startFireworks(9000);
+  }
+
+  document.getElementById('celebration-close').addEventListener('click', () => {
+    celebrationOverlay.classList.add('hidden');
+  });
+  document.getElementById('celebration-end').addEventListener('click', () => {
+    celebrationOverlay.classList.add('hidden');
+    confirmEndGame();
+  });
+  // Tap the trophy in the banner to set the fireworks off again.
+  winnerSlot.addEventListener('click', (e) => {
+    if (e.target && e.target.classList.contains('trophy')) startFireworks(4000);
+  });
+
   function renderWinnerBanner() {
     const t = totals();
     const maxTotal = t.length > 0 ? Math.max(...t) : 0;
@@ -766,14 +999,25 @@
       const winners = state.players.filter((_, i) => t[i] === maxTotal);
       winnerSlot.innerHTML = `
         <div class="winner-banner">
-          <span class="trophy">🏆</span>
+          <span class="trophy" title="Nochmal feiern">🏆</span>
           <span>${escapeHtml(winners.join(', '))} ${winners.length > 1 ? 'erreichen' : 'erreicht'} ${maxTotal} Punkte und ${winners.length > 1 ? 'gewinnen' : 'gewinnt'}!</span>
         </div>
       `;
       endGameSlot.innerHTML = '<button class="end-game-btn" id="end-game-btn">Spiel beenden und Sieg vermerken</button>';
+      // Only once per win — not on every re-render or page reload.
+      if (!state.celebrated) {
+        state.celebrated = true;
+        saveState();
+        celebrate(winners, maxTotal);
+      }
     } else {
       winnerSlot.innerHTML = '';
       endGameSlot.innerHTML = '';
+      // A corrected round can drop everyone back below 200; the next win celebrates again.
+      if (state.celebrated) {
+        state.celebrated = false;
+        saveState();
+      }
     }
   }
 
@@ -818,9 +1062,24 @@
   }
 
   function resetToSetup() {
+    stopFireworks();
+    celebrationOverlay.classList.add('hidden');
     state = { screen: 'setup', players: ['', ''], rounds: [] };
     saveState();
     render();
+  }
+
+  function confirmEndGame() {
+    const winners = currentWinners();
+    if (winners.length === 0) return;
+    const label = winners.join(', ') + (winners.length > 1 ? ' gewinnen' : ' gewinnt');
+    showConfirm(`${label} mit ${Math.max(...totals())} Punkten. Sieg vermerken und Spiel beenden?`, () => {
+      winners.forEach(name => {
+        wins[name] = (wins[name] || 0) + 1;
+      });
+      saveWins();
+      resetToSetup();
+    });
   }
 
   newGameBtn.addEventListener('click', () => {
@@ -840,17 +1099,7 @@
   });
 
   document.getElementById('end-game-slot').addEventListener('click', (e) => {
-    if (e.target && e.target.id === 'end-game-btn') {
-      const winners = currentWinners();
-      const label = winners.length > 1 ? winners.join(', ') : winners[0];
-      showConfirm(`${label} gewinnt mit ${Math.max(...totals())} Punkten. Sieg vermerken und Spiel beenden?`, () => {
-        winners.forEach(name => {
-          wins[name] = (wins[name] || 0) + 1;
-        });
-        saveWins();
-        resetToSetup();
-      });
-    }
+    if (e.target && e.target.id === 'end-game-btn') confirmEndGame();
   });
 
   // ---- Edit round modal ----
@@ -868,15 +1117,15 @@
     editingScores = state.rounds[rIdx].slice();
     editRoundNum.textContent = rIdx + 1;
     editRoundInputs.innerHTML = '';
-    rankedOrder().forEach(pIdx => {
+    state.players.forEach((name, i) => {
       const row = document.createElement('div');
       row.className = 'score-input-row';
       row.innerHTML = `
-        <span class="sir-name">${escapeHtml(state.players[pIdx])}</span>
+        <span class="sir-name">${escapeHtml(name)}</span>
         <div class="sir-controls">
-          <button class="stepper-btn" data-idx="${pIdx}" data-delta="-1">&minus;</button>
-          <input class="sir-input" type="number" inputmode="numeric" value="${editingScores[pIdx] || 0}" data-idx="${pIdx}">
-          <button class="stepper-btn" data-idx="${pIdx}" data-delta="1">+</button>
+          <button class="stepper-btn" data-idx="${i}" data-delta="-1">&minus;</button>
+          <input class="sir-input" type="number" inputmode="numeric" value="${editingScores[i] || 0}" data-idx="${i}">
+          <button class="stepper-btn" data-idx="${i}" data-delta="1">+</button>
         </div>
       `;
       editRoundInputs.appendChild(row);
